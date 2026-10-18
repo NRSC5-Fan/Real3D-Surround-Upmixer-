@@ -29,6 +29,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/serialization/vector.hpp>
+#include <boost/serialization/version.hpp>
 #include <boost/format.hpp>
 #include <functional>
 #include <strstream>
@@ -42,24 +43,47 @@ static const GUID fs_guid = { 0xf856c6d5, 0x1888, 0x4de3, { 0x87, 0x61, 0xa, 0x4
 
 
 
+// selectable FFT block sizes (samples per channel). 4096 is the original behaviour and stays the default.
+static const unsigned g_block_sizes[] = { 1024, 2048, 4096, 8192, 16384 };
+static const int g_num_block_sizes = (int)(sizeof(g_block_sizes)/sizeof(g_block_sizes[0]));
+static const unsigned g_default_blocksize = 4096;
+// index of a block size in the list above (falls back to the default's index)
+static inline int block_index(unsigned b) { for (int pass=0; pass<2; pass++) for (int i=0; i<g_num_block_sizes; i++) if (g_block_sizes[i] == (pass ? g_default_blocksize : b)) return i; return 0; }
+
+// preset format version: 0 = original fields, 1 = + center_spread, blocksize
+// (declared before the class so that the in-class (de)serialization code sees it)
+struct freesurround_params;
+BOOST_CLASS_VERSION(freesurround_params, 1)
+
 // holds the user-configurable parameters of the FreeSurround DSP
 struct freesurround_params {
 	// the user-configurable parameters
 	float center_image, shift, depth, circular_wrap, focus, front_sep, rear_sep, bass_lo, bass_hi;
 	bool use_lfe;
+	float center_spread;			// 0 = off; how much of the front center channel is spread into front left/right
+	unsigned blocksize;				// FFT block size in samples per channel (4096 = original behaviour)
 	channel_setup channels_fs;		// FreeSurround channel setup	
 	std::vector<unsigned> chanmap;	// FreeSurround -> fb2k channel index translation (derived data for faster lookup)
 
 	// construct with defaults
 	freesurround_params(): center_image(0.7), shift(0), depth(1), circular_wrap(90), focus(0), front_sep(1), rear_sep(1), 
-		bass_lo(40), bass_hi(90), use_lfe(false) { set_channels_fs(cs_5point1); }
+		bass_lo(40), bass_hi(90), use_lfe(false), center_spread(0), blocksize(g_default_blocksize) { set_channels_fs(cs_5point1); }
+
+	// keep loaded values inside what the dialog/decoder support
+	void sanitize() {
+		if (!(center_spread >= 0)) center_spread = 0;	// also catches NaN
+		if (center_spread > 1) center_spread = 1;
+		if (g_block_sizes[block_index(blocksize)] != blocksize) blocksize = g_default_blocksize;
+	}
 
 	// construct from DSP preset
-	freesurround_params(const dsp_preset &in) {
+	// (fields missing from older preset versions must start at their defaults, hence the initializers)
+	freesurround_params(const dsp_preset &in): center_spread(0), blocksize(g_default_blocksize) {
 		try {
 			std::strstream ss((char*)in.get_data(),(int)in.get_data_size());
 			boost::archive::binary_iarchive ar(ss);
 			ar >> *this;
+			sanitize();
 		} catch(...) { console::warning("Unsupported DSP config version; using defaults."); *this = freesurround_params(); }
 	}
 
@@ -93,7 +117,7 @@ struct freesurround_params {
 	}
 
 	// the actual serialization/deserialization
-	template<class A> void serialize(A &ar, const unsigned v) { ar & center_image & shift & depth & circular_wrap & focus & front_sep & rear_sep & channels_fs & chanmap & bass_lo & bass_hi & use_lfe; }
+	template<class A> void serialize(A &ar, const unsigned v) { ar & center_image & shift & depth & circular_wrap & focus & front_sep & rear_sep & channels_fs & chanmap & bass_lo & bass_hi & use_lfe; if (v >= 1) ar & center_spread & blocksize; }
 };
 
 
@@ -104,11 +128,10 @@ static inline void append_samples(stream_chunker<float> &r, double *p, unsigned 
 
 // the FreeSurround DSP plugin class
 class freesurround_dsp: public dsp_impl_base {
-	enum { chunk_size = 4096 };
 public:
 	// construct the plugin instance from a preset
-	freesurround_dsp(const dsp_preset &in): params(in), rechunker(boost::bind(&freesurround_dsp::process_chunk,this,_1), chunk_size*2), 
-		decoder(params.channels_fs), srate(44100), chan_code(params.channels_fb())		
+	freesurround_dsp(const dsp_preset &in): params(in), rechunker(boost::bind(&freesurround_dsp::process_chunk,this,_1), params.blocksize*2), 
+		decoder(params.channels_fs, params.blocksize), srate(44100), chan_code(params.channels_fb()), chunk_size(params.blocksize)		
 	{
 		// set up decoder parameters according to preset params
 		decoder.circular_wrap(params.circular_wrap);
@@ -119,6 +142,7 @@ public:
 		decoder.front_separation(params.front_sep);
 		decoder.rear_separation(params.rear_sep);
 		decoder.bass_redirection(params.use_lfe);
+		decoder.center_spread(params.center_spread);
 		decoder.low_cutoff(params.bass_lo/(srate/2.0));
 		decoder.high_cutoff(params.bass_hi/(srate/2.0));
 	}
@@ -168,7 +192,7 @@ private:
 	freesurround_params params;			// parameters
 	stream_chunker<float> rechunker;	// gathers/splits the inbound data stream into equally-sized chunks
 	freesurround_decoder decoder;		// the surround decoder
-	unsigned srate, chan_code;			// last known sampling rate & fb2k channel setup code
+	unsigned srate, chan_code, chunk_size;			// last known sampling rate & fb2k channel setup code
 };
 
 static dsp_factory_t<freesurround_dsp> g_dsp_sample_factory;
@@ -196,6 +220,7 @@ public:
 	int slider_wrap, slider_shift, slider_depth, slider_focus;
 	int combo_config, slider_frontsep, slider_rearsep, check_redir;
 	int slider_basslo, slider_basshi;
+	int slider_spread, combo_block;
 };
 
 IMPLEMENT_DYNAMIC(CConfigDialog, CDialog)
@@ -203,7 +228,8 @@ IMPLEMENT_DYNAMIC(CConfigDialog, CDialog)
 CConfigDialog::CConfigDialog(freesurround_params &s, dsp_preset_edit_callback &cbf, CWnd* pParent): 
 	CDialog(CConfigDialog::IDD, pParent), s(s), cbf(cbf), slider_wrap(s.circular_wrap*100/360), slider_shift(s.shift*50 + 50),
 	slider_depth(s.depth*25), slider_focus(s.focus*50 + 50), slider_frontsep(s.front_sep*50), slider_rearsep(s.rear_sep*50),
-	check_redir(s.use_lfe), slider_basslo(s.bass_lo/1.5), slider_basshi(s.bass_hi/1.5)
+	check_redir(s.use_lfe), slider_basslo(s.bass_lo/1.5), slider_basshi(s.bass_hi/1.5),
+		slider_spread((int)(s.center_spread*100 + 0.5)), combo_block(block_index(s.blocksize))
 {
 	switch (s.channels_fs) {
 		case cs_stereo: combo_config = 0; break;			
@@ -244,6 +270,8 @@ void CConfigDialog::DoDataExchange(CDataExchange* pDX) {
 	DDX_Check(pDX, IDC_REDIR, check_redir);
 	DDX_Slider(pDX, IDC_BASSLO, slider_basslo);
 	DDX_Slider(pDX, IDC_BASSHI, slider_basshi);
+	DDX_Slider(pDX, IDC_SPREAD, slider_spread);
+	DDX_CBIndex(pDX, IDC_BLOCKSIZE, combo_block);
 	// copy to settings
 	s.circular_wrap = slider_wrap*360.0/100.0;
 	s.shift = slider_shift/50.0-1.0;
@@ -254,6 +282,8 @@ void CConfigDialog::DoDataExchange(CDataExchange* pDX) {
 	s.bass_lo = slider_basslo*1.5;
 	s.bass_hi = slider_basshi*1.5;
 	s.use_lfe = check_redir;
+	s.center_spread = slider_spread/100.0f;
+	if (combo_block >= 0 && combo_block < g_num_block_sizes) s.blocksize = g_block_sizes[combo_block];
 	s.set_channels_fs(remap[combo_config]);
 	// update display
 	::uSetDlgItemText(*this,IDC_WRAPT, (boost::format("(%.0f)") % s.circular_wrap).str().c_str());
@@ -264,6 +294,7 @@ void CConfigDialog::DoDataExchange(CDataExchange* pDX) {
 	::uSetDlgItemText(*this,IDC_REARSEPT, (boost::format("(%.2fx)") % s.rear_sep).str().c_str());
 	::uSetDlgItemText(*this,IDC_BASSLOT, (boost::format("(%.0fHz)") % s.bass_lo).str().c_str());
 	::uSetDlgItemText(*this,IDC_BASSHIT, (boost::format("(%.0fHz)") % s.bass_hi).str().c_str());
+	::uSetDlgItemText(*this,IDC_SPREADT, (boost::format("(%.0f%%)") % (s.center_spread*100)).str().c_str());
 	// update preset
 	dsp_preset_impl tmp; s.to_preset(tmp);
 	cbf.on_preset_changed(tmp);
@@ -273,6 +304,7 @@ BEGIN_MESSAGE_MAP(CConfigDialog, CDialog)
 	ON_WM_HSCROLL()
 	ON_CBN_SELCHANGE(IDC_CONFIG, &CConfigDialog::OnCbnSelchangeConfig)
 	ON_BN_CLICKED(IDC_REDIR, &CConfigDialog::OnBnClickedRedir)
+	ON_CBN_SELCHANGE(IDC_BLOCKSIZE, &CConfigDialog::OnCbnSelchangeConfig)
 END_MESSAGE_MAP()
 
 void freesurround_dsp::g_show_config_popup(const dsp_preset &p, HWND wnd, dsp_preset_edit_callback &cbf) { 

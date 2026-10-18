@@ -173,6 +173,14 @@ public:
 	*/
 	void rear_separation(float v);
 
+	/**
+	* Spread the front center channel into the front left/right channels.
+	* Value range: [0.0..1.0] -- 0.0 is off (default, output unchanged), 1.0 moves all of the center
+	* channel's signal into front left+right. Constant-power (the total energy stays the same).
+	* Only has an effect in channel setups that have front left, front center and front right.
+	*/
+	void center_spread(float v);
+
 
 	// --- bass redirection (to LFE)
 

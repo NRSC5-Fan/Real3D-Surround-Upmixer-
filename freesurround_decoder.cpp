@@ -46,6 +46,14 @@ public:
 		outbuf.resize((N+N/2)*C);
 		signal.resize(C,vector<cplx>(N));
 
+		// locate the front left/center/right channels (for center spread)
+		ix_fl = ix_fc = ix_fr = -1;
+		for (unsigned c=0;c<chn_id[setup].size();c++) {
+			if (chn_id[setup][c] == ci_front_left) ix_fl = (int)c;
+			if (chn_id[setup][c] == ci_front_center) ix_fc = (int)c;
+			if (chn_id[setup][c] == ci_front_right) ix_fr = (int)c;
+		}
+
 		// init the window function
 		for (unsigned k=0;k<N;k++)
 			wnd[k] = sqrt(0.5*(1-cos(2*pi*k/N))/N);
@@ -58,6 +66,7 @@ public:
 		set_center_image(1);
 		set_front_separation(1);
 		set_rear_separation(1);
+		set_center_spread(0);
 		set_low_cutoff(40.0/22050);
 		set_high_cutoff(90.0/22050);
 		set_bass_redirection(false);
@@ -97,6 +106,7 @@ public:
 	void set_center_image(float v) { center_image = v; }
 	void set_front_separation(float v) { front_separation = v; }
 	void set_rear_separation(float v) { rear_separation = v; }
+	void set_center_spread(float v) { center_spread = v < 0 ? 0 : (v > 1 ? 1 : v); }
 	void set_low_cutoff(float v) { lo_cut = v*(N/2); }
 	void set_high_cutoff(float v) { hi_cut = v*(N/2); }
 	void set_bass_redirection(bool v) { use_lfe = v; }
@@ -163,6 +173,15 @@ private:
 				vector<float*> &a = chn_alloc[setup][c];
 				signal[c][f] = polar(amp_total*((1-x)*(1-y)*a[q][p] + x*(1-y)*a[q][p+1] + (1-x)*y*a[q+1][p] + x*y*a[q+1][p+1]),
 					phase_of[1+(int)sign(chn_xsf[setup][c])]);
+			}
+
+			// optionally spread the front center channel into front left/right (constant power; skipped when 0)
+			if (center_spread > 0 && ix_fc >= 0 && ix_fl >= 0 && ix_fr >= 0) {
+				double th = center_spread*0.5*pi, gc = cos(th), gs = sin(th)*0.70710678118654752;
+				cplx cc = signal[ix_fc][f];
+				signal[ix_fl][f] += gs*cc;
+				signal[ix_fr][f] += gs*cc;
+				signal[ix_fc][f] = gc*cc;
 			}
 
 			// optionally redirect bass
@@ -251,6 +270,8 @@ private:
 	float center_image;				// presence of the center speaker
 	float front_separation;			// front stereo separation
 	float rear_separation;			// rear stereo separation
+	float center_spread;			// how much of the front center channel is spread into front left/right
+	int ix_fl, ix_fc, ix_fr;		// channel indices of front left/center/right in the setup (-1 if absent)
 	float lo_cut, hi_cut;			// LFE cutoff frequencies
 	bool use_lfe;					// whether to use the LFE channel
 
@@ -280,6 +301,7 @@ void freesurround_decoder::focus(float v) { impl->set_focus(v); }
 void freesurround_decoder::center_image(float v) { impl->set_center_image(v); }
 void freesurround_decoder::front_separation(float v) { impl->set_front_separation(v); }
 void freesurround_decoder::rear_separation(float v) { impl->set_rear_separation(v); }
+void freesurround_decoder::center_spread(float v) { impl->set_center_spread(v); }
 void freesurround_decoder::low_cutoff(float v) { impl->set_low_cutoff(v); }
 void freesurround_decoder::high_cutoff(float v) { impl->set_high_cutoff(v); }
 void freesurround_decoder::bass_redirection(bool v) { impl->set_bass_redirection(v); }
