@@ -20,6 +20,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define STREAM_CHUNKER_H
 #include <boost/function.hpp> // -> www.boost.org
 #include <vector>
+#include <algorithm>
+#include <iterator>
+#include <cstddef>
 
 // accumulates/splits data blocks of arbitrary length into chunks of 
 // specified length and passes them on to the given handler
@@ -38,15 +41,16 @@ public:
 	unsigned buffered() { return (unsigned)buffer.size(); }
 
 	// append a block of data
-	void append(const std::vector<T> &data) { append(&data[0],data.size()); }
+	void append(const std::vector<T> &data) { append(&data[0],(unsigned)data.size()); }
 	template<unsigned N> void append(const T data[N]) { append(&data[0],N); }
 	void append(T *data, unsigned n) {
 		unsigned cp=0;
 		// if we have elements in the current buffer, fill it up until it is full (then process it)
 		if (buffer.size()) {
-			unsigned delta = min(n,chunk_len-buffer.size());
-			copy(&data[0],&data[delta],std::back_inserter(buffer));
-			cp += delta;
+			// buffer.size() is size_t (64 bit on x64), n/chunk_len are unsigned: do the math in size_t
+			size_t delta = (std::min)((size_t)n, (size_t)chunk_len - buffer.size());
+			std::copy(&data[0],&data[delta],std::back_inserter(buffer));
+			cp += (unsigned)delta;
 			if (buffer.size() == chunk_len) {
 				handle_chunk(&buffer[0]);
 				buffer.clear();

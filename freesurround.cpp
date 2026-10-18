@@ -18,6 +18,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include "stdafx.h"
 #include "resource1.h"
+#ifndef BOOST_BIND_GLOBAL_PLACEHOLDERS
+#define BOOST_BIND_GLOBAL_PLACEHOLDERS
+#endif
 #include "../SDK/foobar2000.h"
 #include "stream_chunker.h"
 #include "freesurround_decoder.h"
@@ -54,14 +57,16 @@ struct freesurround_params {
 	// construct from DSP preset
 	freesurround_params(const dsp_preset &in) {
 		try {
-			boost::archive::binary_iarchive(std::strstream((char*)in.get_data(),(int)in.get_data_size())) >> *this;
+			std::strstream ss((char*)in.get_data(),(int)in.get_data_size());
+			boost::archive::binary_iarchive ar(ss);
+			ar >> *this;
 		} catch(...) { console::warning("Unsupported DSP config version; using defaults."); *this = freesurround_params(); }
 	}
 
 	// convert to DSP preset
 	void to_preset(dsp_preset &out) const {
-		std::strstream s; boost::archive::binary_oarchive(s) << *this;
-		out.set_data(s.str(),s.tellp()); out.set_owner(fs_guid);
+		std::strstream s; { boost::archive::binary_oarchive ar(s); ar << *this; }
+		out.set_data(s.str(),(size_t)s.tellp()); out.set_owner(fs_guid);
 	}
 
 	// compute the fb2k version of the channel setup code
@@ -93,6 +98,10 @@ struct freesurround_params {
 
 
 
+// feed fb2k samples into the float rechunker, whatever audio_sample is (float or double)
+static inline void append_samples(stream_chunker<float> &r, float *p, unsigned n) { r.append(p,n); }
+static inline void append_samples(stream_chunker<float> &r, double *p, unsigned n) { std::vector<float> t(p,p+n); r.append(&t[0],n); }
+
 // the FreeSurround DSP plugin class
 class freesurround_dsp: public dsp_impl_base {
 	enum { chunk_size = 4096 };
@@ -118,7 +127,7 @@ public:
 	bool on_chunk(audio_chunk *chunk, abort_callback &) {
 		srate = chunk->get_srate();
 		if (chunk->get_channel_config() == audio_chunk::channel_config_stereo) {
-			rechunker.append(chunk->get_data(), (unsigned)chunk->get_data_length());
+			append_samples(rechunker, chunk->get_data(), (unsigned)chunk->get_data_length());
 			return false;
 		}
 		return true;
@@ -135,11 +144,12 @@ public:
 		decoder.low_cutoff(params.bass_lo/(srate/2.0));
 		decoder.high_cutoff(params.bass_hi/(srate/2.0));
 		// decode original chunk into discrete multichannel
-		float *src = decoder.decode(stereo), *dst = chunk->get_data();
+		float *src = decoder.decode(stereo);
+		audio_sample *dst = chunk->get_data();
 		// copy the data into the output chunk (respecting the different channel orders in fb2k and FS)
 		for (unsigned c=0,num=(unsigned)params.chanmap.size();c<num;c++)
 			for (unsigned s=0,idx=audio_chunk::g_channel_index_from_flag(chan_code,params.chanmap[c]); s<num*chunk_size; s += num)
-				dst[idx+s] = src[c+s];
+				dst[idx+s] = (audio_sample)src[c+s];
 	}
 
 	// misc plugin interface
@@ -266,7 +276,8 @@ BEGIN_MESSAGE_MAP(CConfigDialog, CDialog)
 END_MESSAGE_MAP()
 
 void freesurround_dsp::g_show_config_popup(const dsp_preset &p, HWND wnd, dsp_preset_edit_callback &cbf) { 
-	CConfigDialog popup(freesurround_params(p),cbf,NULL);
+	freesurround_params fp(p);
+	CConfigDialog popup(fp,cbf,NULL);
 	if (popup.DoModal() != IDOK) 
 		cbf.on_preset_changed(p);
 }

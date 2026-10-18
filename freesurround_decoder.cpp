@@ -18,6 +18,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include "stdafx.h"
 #include <cmath>
+#include <cstring>
 #include <vector>
 #include <complex>
 #include "kiss_fftr.h"
@@ -62,7 +63,8 @@ public:
 		set_bass_redirection(false);
 	}
 
-	~decoder_impl() { delete forward; delete inverse; }
+	// kiss_fftr_alloc() allocates with new char[] (and the struct is opaque here), so release the same way
+	~decoder_impl() { delete[] (char*)forward; delete[] (char*)inverse; }
 
 	// decode a stereo chunk, produces a multichannel chunk of the same size (lagged)
 	float *decode(float *input) {
@@ -176,7 +178,8 @@ private:
 		}
 
 		// shift the last 2/3 to the first 2/3 of the output buffer
-		memcpy(&outbuf[0], &outbuf[C*N/2], N*C*4);
+		// (source and destination overlap -> must be memmove; memcpy is undefined here and a 64-bit CRT may copy in a different order)
+		memmove(&outbuf[0], &outbuf[C*N/2], N*C*4);
 		// and clear the rest
 		memset(&outbuf[C*N], 0, C*4*N/2);
 		// backtransform each channel and overlap-add
@@ -281,6 +284,6 @@ void freesurround_decoder::low_cutoff(float v) { impl->set_low_cutoff(v); }
 void freesurround_decoder::high_cutoff(float v) { impl->set_high_cutoff(v); }
 void freesurround_decoder::bass_redirection(bool v) { impl->set_bass_redirection(v); }
 unsigned freesurround_decoder::buffered() { return impl->buffered(); }
-unsigned freesurround_decoder::num_channels(channel_setup s) { return chn_id[s].size(); }
+unsigned freesurround_decoder::num_channels(channel_setup s) { return (unsigned)chn_id[s].size(); }
 channel_id freesurround_decoder::channel_at(channel_setup s, unsigned i) { return i < chn_id[s].size() ? chn_id[s][i] : ci_none; }
 

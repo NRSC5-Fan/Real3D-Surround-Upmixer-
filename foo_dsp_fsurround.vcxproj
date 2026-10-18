@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Real3D / foo_dsp_fsurround - Visual Studio 2022 project, Win32 + x64.
+
+  Expected layout (same as the old VS2008 solution): this folder sits next to the
+  foobar2000 SDK folders, i.e.
+
+      <sdk>\foobar2000\foo_dsp_fsurround\   <- this project
+      <sdk>\foobar2000\SDK\
+      <sdk>\foobar2000\helpers\
+      <sdk>\foobar2000\foobar2000_component_client\
+      <sdk>\foobar2000\shared\
+      <sdk>\pfc\
+      <sdk>\libPPUI\   (only present in newer SDKs)
+
+  Use the SDK release that matches the foobar2000 you target (64-bit components need
+  foobar2000 v2.x and a 2023+ SDK).
+
+  Boost: set the BOOST_ROOT environment variable to your Boost folder.
+    * Default: links the prebuilt static Boost.Serialization for the same toolset
+      (auto-link; lib dir = $(BOOST_ROOT)\stage\x64\lib or ...\stage\Win32\lib, or set
+      BOOST_LIBRARYDIR).
+    * Alternative: build with  /p:VendoredBoostSerialization=true  to compile the
+      serialization sources in .\sterilization instead (they must match your Boost headers).
+-->
+<Project DefaultTargets="Build" ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32"><Configuration>Debug</Configuration><Platform>Win32</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32"><Configuration>Release</Configuration><Platform>Win32</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <ProjectGuid>{B622CFC3-DA57-4E88-8DBF-2A1CFC8B76C7}</ProjectGuid>
+    <RootNamespace>foo_dsp_fsurround</RootNamespace>
+    <Keyword>MFCDLLProj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseOfMfc>Static</UseOfMfc>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+
+  <PropertyGroup>
+    <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)obj\$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <TargetName>foo_dsp_fsurround</TargetName>
+    <LinkIncremental Condition="'$(Configuration)'=='Debug'">true</LinkIncremental>
+    <LinkIncremental Condition="'$(Configuration)'=='Release'">false</LinkIncremental>
+    <VendoredBoostSerialization Condition="'$(VendoredBoostSerialization)'==''">false</VendoredBoostSerialization>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>false</SDLCheck>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <!-- the plugin still relies on a few MSVC-isms in the foobar2000 SDK headers -->
+      <ConformanceMode>false</ConformanceMode>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalIncludeDirectories>$(BOOST_ROOT);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_WINDOWS;_USRDLL;FOO_DSP_TUTORIAL_EXPORTS;_CRT_SECURE_NO_WARNINGS;_SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING;BOOST_BIND_GLOBAL_PLACEHOLDERS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Platform)'=='Win32'">WIN32;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(VendoredBoostSerialization)'=='true'">BOOST_ALL_NO_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <FloatingPointModel>Fast</FloatingPointModel>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories Condition="'$(Platform)'=='x64'">$(BOOST_LIBRARYDIR);$(BOOST_ROOT)\stage\x64\lib;$(BOOST_ROOT)\lib64-msvc-14.3;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories Condition="'$(Platform)'=='Win32'">$(BOOST_LIBRARYDIR);$(BOOST_ROOT)\stage\Win32\lib;$(BOOST_ROOT)\lib32-msvc-14.3;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <PreprocessorDefinitions>NDEBUG;_SECURE_SCL=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- SSE2 is the baseline on x64; only 32-bit needs the switch -->
+  <ItemDefinitionGroup Condition="'$(Platform)'=='Win32'">
+    <ClCompile>
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+    </ClCompile>
+  </ItemDefinitionGroup>
+
+  <ItemGroup>
+    <ClCompile Include="freesurround.cpp" />
+    <ClCompile Include="freesurround_decoder.cpp" />
+    <ClCompile Include="channelmaps.cpp" />
+    <ClCompile Include="kiss_fft.cpp" />
+    <ClCompile Include="kiss_fftr.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="_kiss_fft_guts.h" />
+    <ClInclude Include="channelmaps.h" />
+    <ClInclude Include="freesurround_decoder.h" />
+    <ClInclude Include="kiss_fft.h" />
+    <ClInclude Include="kiss_fftr.h" />
+    <ClInclude Include="resource1.h" />
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="stream_chunker.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="foo_dsp_fsurround.rc" />
+  </ItemGroup>
+
+  <!-- optional: compile the vendored Boost.Serialization sources instead of linking the prebuilt lib -->
+  <ItemGroup Condition="'$(VendoredBoostSerialization)'=='true'">
+    <ClCompile Include="sterilization\*.cpp" />
+  </ItemGroup>
+
+  <!-- foobar2000 SDK projects -->
+  <ItemGroup>
+    <ProjectReference Include="..\SDK\foobar2000_SDK.vcxproj"><Project>{E8091321-D79D-4575-86EF-064EA1A4A20D}</Project></ProjectReference>
+    <ProjectReference Include="..\helpers\foobar2000_sdk_helpers.vcxproj"><Project>{EE47764E-A202-4F85-A767-ABDAB4AFF35F}</Project></ProjectReference>
+    <ProjectReference Include="..\foobar2000_component_client\foobar2000_component_client.vcxproj"><Project>{71AD2674-065B-48F5-B8B0-E1F9D3892081}</Project></ProjectReference>
+    <ProjectReference Include="..\..\pfc\pfc.vcxproj"><Project>{EBFFFB4E-261D-44D3-B89C-957B31A0BF9C}</Project></ProjectReference>
+    <ProjectReference Include="..\..\libPPUI\libPPUI.vcxproj" Condition="Exists('..\..\libPPUI\libPPUI.vcxproj')" />
+  </ItemGroup>
+
+  <!-- import library for foobar2000's shared.dll (name differs between SDK generations) -->
+  <PropertyGroup>
+    <Fb2kSharedLib Condition="Exists('$(MSBuildProjectDirectory)\..\shared\shared-$(Platform).lib')">..\shared\shared-$(Platform).lib</Fb2kSharedLib>
+    <Fb2kSharedLib Condition="'$(Fb2kSharedLib)'=='' And Exists('$(MSBuildProjectDirectory)\..\shared\shared.lib')">..\shared\shared.lib</Fb2kSharedLib>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <Link>
+      <AdditionalDependencies>$(Fb2kSharedLib);%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>
