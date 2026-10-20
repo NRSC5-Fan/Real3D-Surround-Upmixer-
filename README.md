@@ -23,7 +23,7 @@ Real3D is a DSP plugin for [foobar2000](https://www.foobar2000.org/) that upmixe
 
 ## Install
 
-1. Download `foo_dsp_real3d-x64+x86.fb2k-component` from the [Releases](../../releases) page. One file contains both the 32-bit and the 64-bit build.
+1. Download `foo_dsp_real3d.fb2k-component` from the [Releases](../../releases) page. One file contains both the 32-bit and the 64-bit build.
 2. In foobar2000 open **Preferences > Components > Install...** and pick the file, then restart foobar2000.
 3. Open **Preferences > Playback > DSP Manager**, add **Real3D** to the active chain and use the configure button to open its settings.
 
