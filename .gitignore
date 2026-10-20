@@ -1,0 +1,18 @@
+# build output
+bin/
+obj/
+out/
+x64/
+Win32/
+Debug/
+Release/
+*.obj
+*.pdb
+*.ilk
+*.res
+*.log
+*.user
+*.suo
+.vs/
+# scratch
+*.exe

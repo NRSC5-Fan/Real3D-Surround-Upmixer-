@@ -184,20 +184,18 @@ public:
 
 	// --- bass redirection (to LFE)
 
-	/** 
-	* Enable/disable LFE channel (default: false = disabled)
-	*/
-	void bass_redirection(bool v);
-
 	/**
-	* Set the lower end of the transition band, in Hz/Nyquist (default: 40/22050).
+	* Configure the LFE channel / bass management (default: disabled).
+	* @param enable      split the bass off the main channels into the LFE channel
+	* @param cutoff_hz   low-pass cutoff of the split in Hz (0..200; below 1 nothing is split)
+	* @param level       gain of the LFE channel and of the copies (1 = unity, ~0..2)
+	* @param copy_lr     also copy the split bass to front left and right
+	* @param copy_center also copy the split bass to the front center channel
+	* @param mode        0 = time-domain Linkwitz-Riley crossover (no ringing), 1 = soft FFT fade
+	* @param slope       crossover slope for mode 0: 0 = 12, 1 = 24, 2 = 48 dB/octave
+	* @param srate       sampling rate of the input in Hz
 	*/
-	void low_cutoff(float v);
-
-	/**
-	* Set the upper end of the transition band, in Hz/Nyquist (default: 90/22050).
-	*/
-	void high_cutoff(float v);
+	void lfe(bool enable, float cutoff_hz, float level, bool copy_lr, bool copy_center, int mode, int slope, float srate);
 
 
 	// --- info
